@@ -1,34 +1,34 @@
-# ...existing code...
 import streamlit as st
 import re
 
 st.set_page_config(page_title="LUMEZA MEDICAL REPORT SUMMARISER", layout="wide")
 
-# ...existing code...
-
-# --- session-state compatibility helper (NEW) ---
+# --- session-state compatibility helper ---
 def _ensure_history_container():
-    """
-    Return a mutable list acting as the chat history.
-    Prefer st.session_state.history when available; otherwise use module-global fallback.
-    This avoids AttributeError on older Streamlit versions.
-    """
     if hasattr(st, "session_state"):
         if "history" not in st.session_state:
             st.session_state.history = []
         return st.session_state.history
-    # fallback: global in-memory history (ephemeral for the process)
     if "_local_history" not in globals():
         globals()["_local_history"] = []
     return globals()["_local_history"]
 
-# Use the helper to get the history list
 history = _ensure_history_container()
+
+# --- Dummy function implementations to avoid NameError ---
+def summarize_report(text, max_sentences=3):
+    sentences = re.split(r'[.!?]\s+', text.strip())
+    return sentences[:max_sentences]
+
+def pros_cons(text):
+    return ["Well-structured"], ["Could use more detail"]
+
+def suggestions_from_text(text):
+    return ["Consider follow-up test", "Discuss with a specialist"]
 
 # --- UI ---
 st.title("LUMEZA MEDICAL REPORT SUMMARISER")
-st.caption("No report data is stored to disk or external services. All for your safety😊")
-
+st.caption("No report data is stored to disk or external services. All for your safety😊 one more this is completly for temporary understanding dont forget to consult your doctor")
 
 with st.sidebar:
     st.header("Input")
@@ -37,18 +37,20 @@ with st.sidebar:
     max_sentences = st.number_input("Max summary sentences", min_value=1, max_value=10, value=3)
     st.markdown("Use the chat box on the right for greetings or to ask for summarization.")
 
-# ...existing code...
+# --- Load report content ---
+report_text = ""
+bytes_data = None
 
-# replace direct st.session_state.history usage with `history`
 if uploaded is not None:
     try:
         bytes_data = uploaded.read()
         report_text = bytes_data.decode('utf-8')
     except Exception:
         try:
-            report_text = bytes_data.decode('latin-1')
+            report_text = bytes_data.decode('latin-1') if bytes_data else ""
         except Exception:
             report_text = ""
+
 if not report_text:
     report_text = pasted or ""
 
@@ -58,6 +60,7 @@ with col1:
     st.subheader("Report")
     st.write("Paste or upload a medical report. Nothing is saved as your safety is our policy.")
     report_display = st.text_area("Report text", value=report_text, height=400, key="report_area")
+    
     if st.button("Summarize Report"):
         summary = summarize_report(report_display, max_sentences=max_sentences)
         pros, cons = pros_cons(report_display)
@@ -74,13 +77,16 @@ with col1:
 with col2:
     st.subheader("Chat")
     user_msg = st.text_input("Type a message (e.g. hi, summarize)", key="chat_input")
+    
     if st.button("Send"):
         msg = (user_msg or "").strip()
         reply_obj = {"type": "reply", "message": msg}
         lm = msg.lower()
-        if any(g in lm for g in ['hello','hi','hey','good morning','good afternoon','good evening','good night','namaste']):
+
+        if any(g in lm for g in ['hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening', 'good night', 'namaste']):
             reply = 'Hi there I can summarize a medical report if you paste it and click "Summarize Report" But even consult your doctor😊.'
             reply_obj["reply"] = reply
+
         elif 'summar' in lm or 'analy' in lm or 'report' in lm:
             if report_display and report_display.strip():
                 summary = summarize_report(report_display, max_sentences=max_sentences)
@@ -95,12 +101,14 @@ with col2:
                 })
             else:
                 reply_obj["reply"] = "Please paste or upload the report text first."
-        elif any(t in lm for t in ['thank','thanks']):
+
+        elif any(t in lm for t in ['thank', 'thanks']):
             reply_obj["reply"] = "You're welcome."
+
         else:
-            reply_obj["reply"] = "I can greet and summarize a pasted report. Try saying 'summarize' or paste a report and click Summarize Report but dont forget to consult your doc😊."
+            reply_obj["reply"] = "I can greet and summarize a pasted report. Try saying 'summarize' or paste a report and click Summarize Report but don't forget to consult your doc😊."
+
         history.append(reply_obj)
-        # safe rerun: only call experimental_rerun if available
         if hasattr(st, "experimental_rerun"):
             st.experimental_rerun()
         else:
@@ -132,4 +140,3 @@ with col2:
             st.markdown("---")
 
 st.caption("All processing is ephemeral and kept in session memory only. No files or data are written to disk.")
-# ...existing code...
