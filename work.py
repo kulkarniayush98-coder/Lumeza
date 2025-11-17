@@ -1,142 +1,293 @@
 import streamlit as st
 import re
 
-st.set_page_config(page_title="LUMEZA MEDICAL REPORT SUMMARISER", layout="wide")
+# -------------------------------------------------------------------
+# PAGE CONFIG
+# -------------------------------------------------------------------
+st.set_page_config(page_title="LUMEZA – Medical Summariser", layout="wide")
 
-# --- session-state compatibility helper ---
-def _ensure_history_container():
-    if hasattr(st, "session_state"):
-        if "history" not in st.session_state:
-            st.session_state.history = []
-        return st.session_state.history
-    if "_local_history" not in globals():
-        globals()["_local_history"] = []
-    return globals()["_local_history"]
 
-history = _ensure_history_container()
-
-# --- Dummy function implementations to avoid NameError ---
+# -------------------------------------------------------------------
+# FUNCTIONS
+# -------------------------------------------------------------------
 def summarize_report(text, max_sentences=3):
     sentences = re.split(r'[.!?]\s+', text.strip())
     return sentences[:max_sentences]
 
+
+# Basic keyword → doctor mapping
+SPECIALIST_MAP = {
+    "heart": "Cardiologist",
+    "cardiac": "Cardiologist",
+    "hypertension": "Cardiologist",
+    "blood pressure": "Cardiologist",
+    "diabetes": "Endocrinologist",
+    "thyroid": "Endocrinologist",
+    "fracture": "Orthopedic Surgeon",
+    "bone": "Orthopedic Specialist",
+    "liver": "Hepatologist",
+    "kidney": "Nephrologist",
+    "renal": "Nephrologist",
+    "lung": "Pulmonologist",
+    "asthma": "Pulmonologist",
+    "cholesterol": "Cardiologist",
+    "infection": "Internal Medicine Specialist",
+    "anemia": "Hematologist",
+    "neurology": "Neurologist",
+    "stroke": "Neurologist",
+}
+
+def detect_specialist(text):
+    text_l = text.lower()
+    found = []
+    for keyword, doctor in SPECIALIST_MAP.items():
+        if keyword in text_l:
+            found.append(doctor)
+    return list(set(found)) if found else ["General Physician (for initial evaluation)"]
+
+
+def extract_conditions(text):
+    words = re.findall(r"\b[A-Za-z]{4,}\b", text.lower())
+    common_med_terms = [
+        "hypertension", "diabetes", "infection", "cholesterol", "anemia", "fracture",
+        "inflammation", "renal", "thyroid", "asthma", "tumor", "lesion", "mass"
+    ]
+    found = [w for w in words if w in common_med_terms]
+    return list(set(found))
+
+
+def explain_term(term):
+    explanations = {
+        "hypertension": "Hypertension means consistently high blood pressure.",
+        "diabetes": "Diabetes is a condition where blood sugar levels are elevated.",
+        "anemia": "Anemia means low hemoglobin or reduced red blood cells.",
+        "cholesterol": "High cholesterol increases the risk of heart disease.",
+        "thyroid": "Thyroid issues affect metabolism, energy, and hormones.",
+        "asthma": "Asthma is a chronic lung condition causing breathing difficulty.",
+    }
+    return explanations.get(term.lower(), None)
+
+
+# Pros/cons suggestions
 def pros_cons(text):
-    return ["Well-structured"], ["Could use more detail"]
+    return ["Clear structure"], ["Needs more detail"]
 
 def suggestions_from_text(text):
-    return ["Consider follow-up test", "Discuss with a specialist"]
+    return ["Consider follow-up tests", "Discuss findings with a specialist"]
 
-# --- UI ---
-st.title("LUMEZA MEDICAL REPORT SUMMARISER")
-st.caption("No report data is stored to disk or external services. All for your safety😊 one more this is completly for temporary understanding dont forget to consult your doctor")
 
-with st.sidebar:
-    st.header("Input")
-    uploaded = st.file_uploader("Upload a medical report (text)", type=['txt', 'text'])
-    pasted = st.text_area("Or paste report text here", height=200)
-    max_sentences = st.number_input("Max summary sentences", min_value=1, max_value=10, value=3)
-    st.markdown("Use the chat box on the right for greetings or to ask for summarization.")
+# -------------------------------------------------------------------
+# CSS FOR UI
+# -------------------------------------------------------------------
+st.markdown("""
+<style>
 
-# --- Load report content ---
-report_text = ""
-bytes_data = None
+body {
+    background-color: #edf7f6;
+}
 
-if uploaded is not None:
-    try:
-        bytes_data = uploaded.read()
-        report_text = bytes_data.decode('utf-8')
-    except Exception:
-        try:
-            report_text = bytes_data.decode('latin-1') if bytes_data else ""
-        except Exception:
-            report_text = ""
+/* Animated Gradient Title */
+.gradient-title {
+  font-size: 55px;
+  font-weight: bold;
+  text-align: center;
+  background: linear-gradient(90deg, #51e2f5, #3dd1c8, #60efff, #00bbf0);
+  background-size: 300% 300%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: gradientMove 6s ease infinite;
+  margin-bottom: -5px;
+}
 
-if not report_text:
-    report_text = pasted or ""
+@keyframes gradientMove {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
 
-col1, col2 = st.columns([2, 3])
+.subtitle {
+  color: #2e2e2e;
+  text-align: center;
+  font-size: 20px;
+  margin-top: -10px;
+}
 
-with col1:
-    st.subheader("Report")
-    st.write("Paste or upload a medical report. Nothing is saved as your safety is our policy.")
-    report_display = st.text_area("Report text", value=report_text, height=400, key="report_area")
-    
-    if st.button("Summarize Report"):
-        summary = summarize_report(report_display, max_sentences=max_sentences)
-        pros, cons = pros_cons(report_display)
-        suggestions = suggestions_from_text(report_display)
-        history.append({
-            "type": "summary",
-            "summary": summary,
-            "pros": pros,
-            "cons": cons,
-            "suggestions": suggestions
-        })
-        st.success("Summary generated (in-memory only).")
+.section-title {
+    font-size: 32px;
+    font-weight: 700;
+    color: #00bbf0;
+    margin-bottom: 10px;
+}
 
-with col2:
-    st.subheader("Chat")
-    user_msg = st.text_input("Type a message (e.g. hi, summarize)", key="chat_input")
-    
+.chat-user {
+    background-color: #51e2f5;
+    padding: 10px;
+    border-radius: 12px;
+    margin-bottom: 8px;
+    width: fit-content;
+}
+
+.chat-bot {
+    background-color: #edf7f6;
+    padding: 10px;
+    border-radius: 12px;
+    margin-bottom: 8px;
+    width: fit-content;
+    border: 1px solid #51e2f5;
+}
+
+.box {
+    background-color: white;
+    padding: 15px;
+    border-radius: 12px;
+    border-left: 5px solid #51e2f5;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+
+
+# -------------------------------------------------------------------
+# TOP TITLE
+# -------------------------------------------------------------------
+st.markdown("<div class='gradient-title'>🩺 LUMEZA Medical Intelligence</div>", unsafe_allow_html=True)
+st.markdown("<p class='subtitle'>Fast • Private • In-Browser Medical Insight</p>", unsafe_allow_html=True)
+st.write("---")
+
+
+# -------------------------------------------------------------------
+# SIDEBAR NAVIGATION
+# -------------------------------------------------------------------
+st.sidebar.title("Navigation")
+page = st.sidebar.radio("Go to:", ["🏠 Home", "📄 Report Summariser", "💬 Chat Assistant"])
+
+st.sidebar.info("All processing stays inside your browser only.")
+
+
+
+# -------------------------------------------------------------------
+# PAGE — HOME
+# -------------------------------------------------------------------
+if page == "🏠 Home":
+    st.markdown("### 🚀 Welcome to LUMEZA")
+    st.write("""
+LUMEZA helps you:
+- Summarize medical reports  
+- Extract key issues  
+- Suggest appropriate doctors  
+- Explain medical terms  
+- Chat about your report  
+
+Use the sidebar to navigate.
+""")
+
+
+# -------------------------------------------------------------------
+# PAGE — REPORT SUMMARISER
+# -------------------------------------------------------------------
+elif page == "📄 Report Summariser":
+
+    st.markdown("<div class='section-title'>📄 Report Summariser</div>", unsafe_allow_html=True)
+
+    uploaded = st.file_uploader("Upload medical report (.txt)", type=['txt'])
+    pasted = st.text_area("Or paste report text here", height=180)
+
+    max_sentences = st.slider("Max summary sentences", 1, 10, 3)
+
+    report_text = ""
+    if uploaded:
+        report_text = uploaded.read().decode("utf-8", errors="ignore")
+    if pasted:
+        report_text = pasted
+
+    if st.button("🚀 Summarize"):
+        if report_text.strip():
+
+            st.session_state.report_text = report_text  # store for chat assistant
+
+            summary = summarize_report(report_text, max_sentences)
+            pros, cons = pros_cons(report_text)
+            suggestions = suggestions_from_text(report_text)
+
+            st.markdown("### 🧠 Summary")
+            st.markdown("<div class='box'>", unsafe_allow_html=True)
+            for s in summary:
+                st.markdown(f"- {s}")
+            st.markdown("</div>", unsafe_allow_html=True)
+
+            st.markdown("### 👍 Pros")
+            st.info(", ".join(pros))
+
+            st.markdown("### ⚠ Cons")
+            st.warning(", ".join(cons))
+
+            st.markdown("### 💡 Suggestions")
+            st.success("; ".join(suggestions))
+        else:
+            st.error("Please upload or paste a report first.")
+
+
+
+# -------------------------------------------------------------------
+# PAGE — CHAT ASSISTANT (SMART & REPORT-AWARE)
+# -------------------------------------------------------------------
+elif page == "💬 Chat Assistant":
+
+    st.markdown("<div class='section-title'>💬 Chat with LUMEZA</div>", unsafe_allow_html=True)
+
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+
+    msg = st.text_input("Ask something about your medical report:")
+
     if st.button("Send"):
-        msg = (user_msg or "").strip()
-        reply_obj = {"type": "reply", "message": msg}
-        lm = msg.lower()
+        if msg.strip():
+            st.session_state.chat_history.append(("user", msg))
 
-        if any(g in lm for g in ['hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening', 'good night', 'namaste']):
-            reply = 'Hi there I can summarize a medical report if you paste it and click "Summarize Report" But even consult your doctor😊.'
-            reply_obj["reply"] = reply
-
-        elif 'summar' in lm or 'analy' in lm or 'report' in lm:
-            if report_display and report_display.strip():
-                summary = summarize_report(report_display, max_sentences=max_sentences)
-                pros, cons = pros_cons(report_display)
-                suggestions = suggestions_from_text(report_display)
-                reply_obj.update({
-                    "reply": "Report summary (generated in-memory):",
-                    "summary": summary,
-                    "pros": pros,
-                    "cons": cons,
-                    "suggestions": suggestions
-                })
+            # If no report available
+            if "report_text" not in st.session_state:
+                reply = "Please upload and summarize a medical report first in the 📄 Report Summariser page."
+                st.session_state.chat_history.append(("bot", reply))
             else:
-                reply_obj["reply"] = "Please paste or upload the report text first."
+                report = st.session_state.report_text.lower()
+                user_l = msg.lower()
 
-        elif any(t in lm for t in ['thank', 'thanks']):
-            reply_obj["reply"] = "You're welcome."
+                # 1. Doctor suggestion
+                if "doctor" in user_l or "specialist" in user_l or "consult" in user_l:
+                    specialists = detect_specialist(report)
+                    reply = f"Based on your report, you may consult: **{', '.join(specialists)}**."
 
+                # 2. Explain terms
+                elif "meaning" in user_l or "explain" in user_l:
+                    words = user_l.split()
+                    explained = False
+                    for w in words:
+                        meaning = explain_term(w)
+                        if meaning:
+                            reply = f"**{w.capitalize()}** → {meaning}"
+                            explained = True
+                            break
+                    if not explained:
+                        reply = "Please specify the medical term you want explained."
+
+                # 3. Conditions in report
+                elif "issue" in user_l or "problem" in user_l or "condition" in user_l:
+                    cond = extract_conditions(report)
+                    if cond:
+                        reply = f"Your report mentions: **{', '.join(cond)}**."
+                    else:
+                        reply = "I couldn’t detect specific conditions in the report."
+
+                # 4. General Q&A
+                else:
+                    reply = "I can help with:\n- Which doctor to consult\n- Explaining medical terms\n- Identifying issues in the report\nTry asking: **Which doctor should I consult?**"
+
+                st.session_state.chat_history.append(("bot", reply))
+
+    # Display chat history
+    for sender, text in st.session_state.chat_history:
+        if sender == "user":
+            st.markdown(f"<div class='chat-user'>👤 {text}</div>", unsafe_allow_html=True)
         else:
-            reply_obj["reply"] = "I can greet and summarize a pasted report. Try saying 'summarize' or paste a report and click Summarize Report but don't forget to consult your doc😊."
-
-        history.append(reply_obj)
-        if hasattr(st, "experimental_rerun"):
-            st.experimental_rerun()
-        else:
-            st.success("Message processed (in-memory).")
-
-    st.markdown("### Conversation (in-memory)")
-    for item in reversed(history[-20:]):
-        if item.get("type") == "summary":
-            st.markdown("**Summary generated:**")
-            for s in item["summary"]:
-                st.write("-", s)
-            if item["pros"]:
-                st.write("Pros:", ", ".join(item["pros"]))
-            if item["cons"]:
-                st.write("Cons:", ", ".join(item["cons"]))
-            st.write("Suggestions:", "; ".join(item["suggestions"]))
-            st.markdown("---")
-        else:
-            st.write("you:", item.get("message", ""))
-            st.write("LUMEZA:", item.get("reply", ""))
-            if "summary" in item:
-                for s in item["summary"]:
-                    st.write("-", s)
-                if item.get("pros"):
-                    st.write("Pros:", ", ".join(item["pros"]))
-                if item.get("cons"):
-                    st.write("Cons:", ", ".join(item["cons"]))
-                st.write("Suggestions:", "; ".join(item.get("suggestions", [])))
-            st.markdown("---")
-
-st.caption("All processing is ephemeral and kept in session memory only. No files or data are written to disk.")
+            st.markdown(f"<div class='chat-bot'>🤖 {text}</div>", unsafe_allow_html=True)
